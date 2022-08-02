@@ -1,0 +1,101 @@
+from bs4 import BeautifulSoup             #网页解析，获取数据
+import re              #正则表达式，进行文字匹配
+import urllib.request,urllib.error          #制定URL，获取网页数据
+import xlwt                   #进行excel操作
+import sqlite3
+import xlwings as xw
+
+ss=[]
+for line in open('catalogslist.csv','r',encoding='utf-8-sig'):
+	ss.append(line.strip())
+
+def not_empty(s):
+	return s and s.strip()
+url = filter(not_empty,ss)
+urlList = list(url)
+urlList = urlList[50:100]
+
+def main():
+	ranking = getData(urlList)
+	savepath = "ranking(50-100).xls"
+	saveData(ranking,savepath)
+
+findStorename = re.compile(r'<a href=".*?">(.*?)</a>',re.S)         
+findStoreUrl = re.compile(r'<a href="(.*?)"',re.S) 
+findToppart = re.compile(r'<div class="top-part">(.*?)</div>',re.S)
+findStoreReview = re.compile(r'<div id=".*?">(.*?)</div>',re.S)
+
+
+def getData(urlList):
+	ranking=[]
+	for i in urlList:
+		html = askURL(i)
+		soup = BeautifulSoup(html,"html.parser")
+		
+		for item in soup.find_all("div",class_="restaurant-catalog-wrapper ranking"):
+			
+			for h3 in item.find_all("h3",class_="item-name"):
+				#print(h3)
+				data = []
+				h3 = str(h3)
+				storename = re.findall(findStorename,h3)[0]
+				storeurl = re.findall(findStoreUrl,h3)[0]
+				storeurl = "https://pergikuliner.com" + storeurl
+				data.append(i)
+				data.append(storename)
+				data.append(storeurl)
+				store_html = askURL(storeurl)
+				#print(store_html)
+				soup = BeautifulSoup(store_html,"html.parser")
+				#print(soup)
+				for item in soup.find_all("div",class_="review-wrapper"):
+					for div in item.find_all("div",class_="top-part"):
+						div = str(div)
+						#print(div)
+						storereview = re.findall(findStoreReview,div)[0]
+						data.append(storereview)
+				data = data[:4]
+				#print(data)
+				ranking.append(data)
+	#print(len(ranking))
+	return ranking
+
+
+
+
+def askURL(baseurl):
+    head = {
+        "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.6) Gecko/20091201 Firefox/3.5.6"
+    }
+    request = urllib.request.Request(baseurl,headers=head)
+    #html = ""
+    try:
+        response = urllib.request.urlopen(request)
+        html = response.read().decode('utf-8')
+        #print(html)
+    except urllib.error.URLError as e:
+        if hasattr(e,"code"):
+            print(e.code)
+        if hasattr(e,"reason"):
+            print(e.reason)
+
+    return html
+
+
+
+def saveData(ranking,savepath):
+    book = xlwt.Workbook(encoding='utf-8',style_compression=0)
+    sheet = book.add_sheet('ranking',cell_overwrite_ok=True)
+    col = ('url','store_name','store_url','store_review')
+    for i in range(0,4):
+        sheet.write(0,i,col[i])
+    for i in range(0,len(ranking)):
+        #print('第%d条'%(i+1))
+        data = ranking[i]
+        for j in range(0,4):
+            sheet.write(i+1,j,data[j])
+    book.save(savepath)
+
+
+if __name__ == "__main__":
+	main()
